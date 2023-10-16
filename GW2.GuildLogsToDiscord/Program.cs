@@ -27,7 +27,7 @@ settings.Write(SAVE_FILE_PATH);
 
 foreach (var log in logs)
 {
-    Console.WriteLine(JsonSerializer.Serialize(log));
+    Console.WriteLine(log?.ToString() ?? "null");
 }
 
 static string PromptForApiKey()
