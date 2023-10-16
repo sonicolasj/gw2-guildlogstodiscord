@@ -1,5 +1,6 @@
 ﻿using System.Text.Json;
 using GW2.GuildLogsToDiscord.Api;
+using Gw2Sharp.WebApi.V2.Models;
 
 const string SAVE_FILE_PATH = "./preferences.json";
 
@@ -100,9 +101,9 @@ record Settings(string ApiKey, Guid? GuildId)
 {
     public static async Task<Settings?> Read(string filePath)
     {
-        if (!File.Exists(filePath)) return null;
+        if (!System.IO.File.Exists(filePath)) return null;
 
-        var json = await File.ReadAllTextAsync(filePath);
+        var json = await System.IO.File.ReadAllTextAsync(filePath);
         var settings = JsonSerializer.Deserialize<Settings>(json)!;
 
         if (string.IsNullOrWhiteSpace(settings.ApiKey)) return null;
@@ -111,6 +112,6 @@ record Settings(string ApiKey, Guid? GuildId)
 
     public void Write(string filePath)
     {
-        File.WriteAllTextAsync(filePath, JsonSerializer.Serialize(this));
+        System.IO.File.WriteAllTextAsync(filePath, JsonSerializer.Serialize(this));
     }
 }

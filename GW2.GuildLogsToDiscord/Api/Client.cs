@@ -1,4 +1,5 @@
-﻿using System.Net.Http.Json;
+﻿using Gw2Sharp;
+using Gw2Sharp.WebApi.V2.Models;
 
 namespace GW2.GuildLogsToDiscord.Api
 {
@@ -6,17 +7,17 @@ namespace GW2.GuildLogsToDiscord.Api
     {
         public Client(string apiKey)
         {
-            _httpClient = new() { BaseAddress = new Uri(API_URL) };
-            _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
+            _connection = new Connection(apiKey);
+            _client = new Gw2Client(_connection);
         }
+
         public async Task<IReadOnlyList<Guild>> GetAccountGuildsAsync()
         {
-            var account = await _httpClient.GetFromJsonAsync<Account>("/v2/account");
-            if (account is null) throw new Exception("Not found");
+            var account = await _client.WebApi.V2.Account.GetAsync();
 
-            var guildRequests = account.Guilds.Select(async id =>
+            var guildRequests = account.GuildLeader.Select(async id =>
             {
-                var guild = await _httpClient.GetFromJsonAsync<Guild>($"/v2/guild/{id}");
+                var guild = await _client.WebApi.V2.Guild[id].GetAsync();
                 if (guild is null) throw new Exception("Not found");
                 return guild;
             });
@@ -28,18 +29,13 @@ namespace GW2.GuildLogsToDiscord.Api
 
         public async Task<IReadOnlyList<GuildLog>> GetGuildLogsAsync(Guid guildId)
         {
-            var logs = await _httpClient.GetFromJsonAsync<IReadOnlyList<GuildLog>>($"/v2/guild/{guildId}/log");
+            var logs = await _client.WebApi.V2.Guild[guildId].Log.GetAsync();
             if (logs is null) throw new Exception("Not found");
             return logs;
         }
 
-        private readonly HttpClient _httpClient;
-        public void Dispose() => _httpClient.Dispose();
-
-        private const string API_URL = "https://api.guildwars2.com/";
+        private readonly Connection _connection;
+        private readonly Gw2Client _client;
+        public void Dispose() => _client.Dispose();
     }
-
-    internal record Account(IReadOnlyList<Guid> Guilds);
-    internal record Guild(Guid Id, string Name, string Tag);
-    internal record GuildLog(int Id, DateTime Time, string? User, string Type);
 }
