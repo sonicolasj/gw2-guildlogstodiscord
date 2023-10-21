@@ -34,6 +34,20 @@ namespace GW2.GuildLogsToDiscord.Api
             return logs;
         }
 
+        public async Task<IReadOnlyList<GuildUpgrade>> GetUpgrades(IReadOnlyList<int> ids)
+        {
+            // Explicit return because ManyAsync crashes with an empty ids parameter.
+            if (ids.Count == 0) return Array.Empty<GuildUpgrade>();
+            return await _client.WebApi.V2.Guild.Upgrades.ManyAsync(ids);
+        }
+
+        public async Task<IReadOnlyList<Item>> GetItems(IReadOnlyList<int> ids)
+        {
+            // Explicit return because ManyAsync crashes with an empty ids parameter.
+            if (ids.Count == 0) return Array.Empty<Item>();
+            return await _client.WebApi.V2.Items.ManyAsync(ids);
+        }
+
         private readonly Connection _connection;
         private readonly Gw2Client _client;
         public void Dispose() => _client.Dispose();

@@ -26,9 +26,15 @@ var logs = await client.GetGuildLogsAsync(selectedGuild.Id);
 // Save the selectedGuild now, as the request went through.
 settings.Write(SAVE_FILE_PATH);
 
+var upgrades = await client.GetUpgrades(logs.GetUpgradeIds());
+var upgradesPerId = upgrades.ToDictionary(upgrade => upgrade.Id, upgrade => upgrade.Name);
+
+var items = await client.GetItems(logs.GetItemIds());
+var itemsPerId = items.ToDictionary(item => item.Id, item => item.Name);
+
 foreach (var log in logs)
 {
-    Console.WriteLine(log.GetMessage());
+    Console.WriteLine(log.GetMessage(itemsPerId, upgradesPerId));
 }
 
 static string PromptForApiKey()
@@ -118,7 +124,31 @@ record Settings(string ApiKey, Guid? GuildId)
 
 static class LogExtensions
 {
-    internal static string GetMessage(this GuildLog log)
+    internal static IReadOnlyList<int> GetUpgradeIds(this IReadOnlyList<GuildLog> logs)
+    {
+        return (
+            logs.OfType<GuildLogUpgrade>()
+                .Select(log => log.UpgradeId)
+                .Distinct()
+                .ToList()
+        );
+    }
+
+    internal static IReadOnlyList<int> GetItemIds(this IReadOnlyList<GuildLog> logs)
+    {
+        return logs.SelectMany(log => log switch
+        {
+            GuildLogStash l when l.Operation.ToEnum() == GuildLogStashOperation.Deposit && l.Count > 0 => new[] { l.ItemId },
+            GuildLogStash l when l.Operation.ToEnum() == GuildLogStashOperation.Move => new[] { l.ItemId },
+            GuildLogStash l when l.Operation.ToEnum() == GuildLogStashOperation.Withdraw && l.Count > 0 => new[] { l.ItemId },
+            GuildLogTreasury l => new[] { l.ItemId },
+            GuildLogUpgrade l when l.ItemId.HasValue => new[] { l.ItemId.Value },
+
+            _ => Array.Empty<int>(),
+        }).Distinct().ToList();
+    }
+
+    internal static string GetMessage(this GuildLog log, IReadOnlyDictionary<int, string> items, IReadOnlyDictionary<int, string> upgrades)
     {
         var message = log switch
         {
@@ -132,21 +162,21 @@ static class LogExtensions
             GuildLogRankChange l => $"{l.ChangedBy} changed the rank of {l.User} from {l.OldRank} to {l.NewRank}",
             GuildLogMotd l => $"{l.User} changed the MOTD to the following:\n{l.Motd}",
 
-            GuildLogStash l when l.Operation.ToEnum() == GuildLogStashOperation.Deposit && l.Count > 0 => $"{l.User} deposited {l.Count} × item_id({l.ItemId}) in the guild stash",
+            GuildLogStash l when l.Operation.ToEnum() == GuildLogStashOperation.Deposit && l.Count > 0 => $"{l.User} deposited {l.Count} × {items[l.ItemId]} in the guild stash",
             GuildLogStash l when l.Operation.ToEnum() == GuildLogStashOperation.Deposit && l.Count == 0 => $"{l.User} deposited {FormatCoins(l.Coins)} coins in the guild stash",
 
-            GuildLogStash l when l.Operation.ToEnum() == GuildLogStashOperation.Move => $"{l.User} moved {l.Count} × item_id({l.ItemId}) in the guild stash",
+            GuildLogStash l when l.Operation.ToEnum() == GuildLogStashOperation.Move => $"{l.User} moved {l.Count} × {items[l.ItemId]} in the guild stash",
 
-            GuildLogStash l when l.Operation.ToEnum() == GuildLogStashOperation.Withdraw && l.Count > 0 => $"{l.User} withdrew {l.Count} × item_id({l.ItemId}) from the guild stash",
+            GuildLogStash l when l.Operation.ToEnum() == GuildLogStashOperation.Withdraw && l.Count > 0 => $"{l.User} withdrew {l.Count} × {items[l.ItemId]} from the guild stash",
             GuildLogStash l when l.Operation.ToEnum() == GuildLogStashOperation.Withdraw && l.Count == 0 => $"{l.User} withdrew {FormatCoins(l.Coins)} from the guild stash",
 
-            GuildLogTreasury l => $"{l.User} added {l.Count} × item_id({l.ItemId}) in the guild treasury",
+            GuildLogTreasury l => $"{l.User} added {l.Count} × {items[l.ItemId]} in the guild treasury",
 
-            GuildLogUpgrade l when l.Action.ToEnum() == GuildLogUpgradeAction.Queued && l.User is null => $"upgrade_id({l.UpgradeId}) got queued",
-            GuildLogUpgrade l when l.Action.ToEnum() == GuildLogUpgradeAction.Queued && l.User is not null => $"{l.User} queued upgrade_id({l.UpgradeId})",
-            GuildLogUpgrade l when l.Action.ToEnum() == GuildLogUpgradeAction.Completed => $"{l.User} completed {l.Count} × item_id({l.ItemId})",
-            GuildLogUpgrade l when l.Action.ToEnum() == GuildLogUpgradeAction.Cancelled => $"{l.User} cancelled {l.Count} × item_id({l.ItemId})",
-            GuildLogUpgrade l when l.Action.ToEnum() == GuildLogUpgradeAction.SpedUp => $"{l.User} sped up {l.Count} × item_id({l.ItemId})",
+            GuildLogUpgrade l when l.Action.ToEnum() == GuildLogUpgradeAction.Queued && l.User is null => $"{upgrades[l.UpgradeId]} got queued",
+            GuildLogUpgrade l when l.Action.ToEnum() == GuildLogUpgradeAction.Queued && l.User is not null => $"{l.User} queued {upgrades[l.UpgradeId]}",
+            GuildLogUpgrade l when l.Action.ToEnum() == GuildLogUpgradeAction.Completed => $"{l.User} completed {l.Count} × {items[l.ItemId!.Value]}",
+            GuildLogUpgrade l when l.Action.ToEnum() == GuildLogUpgradeAction.Cancelled => $"{l.User} cancelled {l.Count} × {items[l.ItemId!.Value]}",
+            GuildLogUpgrade l when l.Action.ToEnum() == GuildLogUpgradeAction.SpedUp => $"{l.User} sped up {l.Count} × {items[l.ItemId!.Value]}",
 
             GuildLogInfluence l => $"{FormatUsers(l.Participants)} added influence to the guild",
 
